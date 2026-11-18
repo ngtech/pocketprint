@@ -380,6 +380,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     // On-device tests, for the paths a JVM cannot stand in for: PdfRenderer
     // and Bitmap, a real TCP stack, and the framework's own PrintAttributes.

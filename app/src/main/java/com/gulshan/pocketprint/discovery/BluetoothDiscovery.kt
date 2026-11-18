@@ -11,6 +11,8 @@ import com.gulshan.pocketprint.model.BtLink
 import com.gulshan.pocketprint.model.Printer
 import com.gulshan.pocketprint.model.PrinterAddress
 import com.gulshan.pocketprint.model.PrinterCapabilities
+import com.gulshan.pocketprint.model.LabelStock
+import com.gulshan.pocketprint.model.MediaSensing
 import com.gulshan.pocketprint.transport.BluetoothTransport
 
 /**
@@ -85,9 +87,10 @@ class BluetoothDiscovery(private val context: Context) {
             return Printer(
                 id = "bt:${device.address}",
                 displayName = name,
-                address = PrinterAddress.Bluetooth(mac = device.address, link = link),
+                address = PrinterAddress.Bluetooth(mac = device.address, link = if (isMxw01Name(name)) BtLink.BLE else link),
                 makeAndModel = advertisedName ?: runCatching { device.name }.getOrNull(),
                 capabilities = guessCapabilities(name),
+                stock = if (isMxw01Name(name)) LabelStock(sensing = MediaSensing.CONTINUOUS, gapMm = 0f) else LabelStock(),
                 lastSeenEpochMs = System.currentTimeMillis(),
             )
         }
@@ -124,6 +127,7 @@ class BluetoothDiscovery(private val context: Context) {
         fun guessCapabilities(name: String): PrinterCapabilities {
             val n = name.lowercase()
             return when {
+                isMxw01Name(name) -> PrinterCapabilities.MXW01
                 // 4BARCODE (4B-*) desktop label printers speak TSPL, as do TSC's
                 // own TE/TTP families that they are compatible with.
                 n.contains("tsc") || n.contains("te2") || n.contains("ttp") ||
@@ -138,8 +142,11 @@ class BluetoothDiscovery(private val context: Context) {
         }
 
         fun looksLikePrinter(name: String?): Boolean {
+            if (isMxw01Name(name)) return true
             val n = name?.lowercase() ?: return false
             return PRINTER_NAME_HINTS.any { n.contains(it) }
         }
+
+        fun isMxw01Name(name: String?): Boolean = name?.trim().equals("MXW01", ignoreCase = true)
     }
 }

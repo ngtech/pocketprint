@@ -33,6 +33,9 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
 import kotlin.coroutines.resume
 
+/** Explicit endpoints for protocols with separate command and bulk-data pipes. */
+data class BleEndpointIds(val service: UUID, val control: UUID, val notifications: UUID, val data: UUID)
+
 /**
  * BLE (GATT) printing. Cheap thermal printers increasingly ship an LE-only
  * radio with no RFCOMM server at all: [BluetoothTransport] can never reach
@@ -52,6 +55,9 @@ class BleTransport(
     private val windowPauseMs: Long = 15,
     private val connectTimeoutMs: Long = 20_000,
     private val opTimeoutMs: Long = 5_000,
+    private val endpointIds: BleEndpointIds? = null,
+    private val onNotification: ((ByteArray) -> Unit)? = null,
+    private val onDisconnected: (() -> Unit)? = null,
 ) : PrinterTransport {
 
     private val main = Handler(Looper.getMainLooper())
@@ -64,6 +70,8 @@ class BleTransport(
     private var gatt: BluetoothGatt? = null
     private var writeCharacteristic: BluetoothGattCharacteristic? = null
     private var notifyCharacteristic: BluetoothGattCharacteristic? = null
+    private var dataCharacteristic: BluetoothGattCharacteristic? = null
+    @Volatile private var ready = false
 
     /** ATT_MTU as negotiated; payload per write is this minus the 3-byte ATT header. */
     @Volatile private var attMtu = DEFAULT_ATT_MTU
@@ -74,6 +82,7 @@ class BleTransport(
     private val pendingConnect = AtomicReference<CancellableContinuation<Int>?>(null)
     private val pendingDiscover = AtomicReference<CancellableContinuation<Int>?>(null)
     private val pendingMtu = AtomicReference<CancellableContinuation<Int>?>(null)
+    private val pendingDescriptor = AtomicReference<CancellableContinuation<Int>?>(null)
 
     /** Whatever the printer volunteered on its notify characteristic. */
     private val inbox = ByteArrayOutputStream()
@@ -86,10 +95,22 @@ class BleTransport(
     private val chunkSize: Int
         get() = (attMtu - ATT_HEADER_BYTES).coerceIn(MIN_CHUNK_BYTES, maxChunkBytes)
 
+    val payloadBytes: Int get() = chunkSize
+
     // ---------------------------------------------------------------- open
 
     @SuppressLint("MissingPermission")
-    override suspend fun open() = withContext(Dispatchers.IO) {
+    override suspend fun open() {
+        try {
+            openConnection()
+        } catch (failure: Throwable) {
+            close()
+            throw failure
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun openConnection() = withContext(Dispatchers.IO) {
         if (!BluetoothTransport.hasConnectPermission(context)) {
             throw TransportException("Bluetooth permission not granted")
         }
@@ -118,6 +139,7 @@ class BleTransport(
             val status = connectOnce(device)
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 discoverAndBind()
+                ready = true
                 return@withContext
             }
             lastError = "GATT status $status"
@@ -135,6 +157,7 @@ class BleTransport(
                 // connectGatt must run on a Looper thread on older stacks or the
                 // callback registration races and yields 133.
                 main.post {
+                    if (!cont.isActive) return@post
                     val g = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         device.connectGatt(
                             context.applicationContext,
@@ -156,7 +179,10 @@ class BleTransport(
                     if (g == null) {
                         pendingConnect.settle(BluetoothGatt.GATT_FAILURE)
                     } else {
-                        gatt = g
+                        if (cont.isActive) gatt = g else {
+                            g.disconnect()
+                            g.close()
+                        }
                     }
                 }
                 cont.invokeOnCancellation { pendingConnect.compareAndSet(cont, null) }
@@ -188,7 +214,25 @@ class BleTransport(
             throw TransportException("GATT service discovery failed on ${address.mac}")
         }
 
-        val choice = selectEndpoints(g.services)
+        val choice = endpointIds?.let { ids ->
+            val service = g.getService(ids.service)
+                ?: throw TransportException("Required BLE service ${ids.service} is missing")
+            val control = service.getCharacteristic(ids.control)
+                ?: throw TransportException("Required BLE control characteristic is missing")
+            val notifications = service.getCharacteristic(ids.notifications)
+                ?: throw TransportException("Required BLE notification characteristic is missing")
+            val data = service.getCharacteristic(ids.data)
+                ?: throw TransportException("Required BLE raster characteristic is missing")
+            for (ch in listOf(control, data)) {
+                if (ch.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE == 0) {
+                    throw TransportException("BLE characteristic ${ch.uuid} does not support writes without response")
+                }
+            }
+            if (notifications.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY == 0) {
+                throw TransportException("BLE status characteristic does not support notifications")
+            }
+            Endpoints(service.uuid, control, notifications, data)
+        } ?: selectEndpoints(g.services)
             ?: run {
                 val seen = g.services.joinToString { it.uuid.toString() }
                 teardownGatt()
@@ -198,6 +242,7 @@ class BleTransport(
             }
         writeCharacteristic = choice.write
         notifyCharacteristic = choice.notify
+        dataCharacteristic = choice.data
         Log.i(TAG, "BLE endpoint ${choice.service}/${choice.write.uuid} notify=${choice.notify?.uuid}")
 
         // Ask for a big MTU BEFORE the first payload write. onMtuChanged carries
@@ -227,20 +272,47 @@ class BleTransport(
     }
 
     @SuppressLint("MissingPermission")
-    private fun enableNotifications(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
-        if (!g.setCharacteristicNotification(ch, true)) return
-        val cccd = ch.getDescriptor(CCCD_UUID) ?: return
+    private suspend fun enableNotifications(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
+        if (!g.setCharacteristicNotification(ch, true)) {
+            if (endpointIds != null) throw TransportException("Could not enable BLE notifications")
+            return
+        }
+        val cccd = ch.getDescriptor(CCCD_UUID) ?: run {
+            if (endpointIds != null) throw TransportException("BLE notification descriptor is missing")
+            return
+        }
         val value = if (ch.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) {
             BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         } else {
             BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            g.writeDescriptor(cccd, value)
-        } else {
-            @Suppress("DEPRECATION")
-            run { cccd.value = value; g.writeDescriptor(cccd) }
+        val status = opGate.withLock {
+            withTimeoutOrNull(opTimeoutMs) {
+                suspendCancellableCoroutine<Int> { cont ->
+                    pendingDescriptor.set(cont)
+                    val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        g.writeDescriptor(cccd, value) == BluetoothStatusCodes.SUCCESS
+                    } else {
+                        @Suppress("DEPRECATION")
+                        run { cccd.value = value; g.writeDescriptor(cccd) }
+                    }
+                    if (!started) pendingDescriptor.settle(BluetoothGatt.GATT_FAILURE)
+                    cont.invokeOnCancellation { pendingDescriptor.compareAndSet(cont, null) }
+                }
+            }
         }
+        if (status != BluetoothGatt.GATT_SUCCESS && endpointIds != null) {
+            throw TransportException("BLE notification setup failed or timed out")
+        }
+    }
+
+    /** A single protocol packet; the caller owns pacing and transaction order. */
+    suspend fun writePacket(bytes: ByteArray, raster: Boolean = false) {
+        require(endpointIds != null) { "Explicit endpoints required for packet writes" }
+        require(bytes.isNotEmpty() && bytes.size <= chunkSize) { "Packet exceeds negotiated BLE payload size" }
+        val ch = (if (raster) dataCharacteristic else writeCharacteristic)
+            ?: throw TransportException("BLE printer disconnected")
+        writeChunk(ch, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
     }
 
     // --------------------------------------------------------------- write
@@ -393,11 +465,19 @@ class BleTransport(
         teardownGatt()
         writeCharacteristic = null
         notifyCharacteristic = null
+        dataCharacteristic = null
         attMtu = DEFAULT_ATT_MTU
+        ready = false
+        onDisconnected?.invoke()
     }
 
     @SuppressLint("MissingPermission")
     private fun teardownGatt() {
+        pendingConnect.settle(BluetoothGatt.GATT_FAILURE)
+        pendingDiscover.settle(BluetoothGatt.GATT_FAILURE)
+        pendingMtu.settle(DEFAULT_ATT_MTU)
+        pendingWrite.settle(BluetoothGatt.GATT_FAILURE)
+        pendingDescriptor.settle(BluetoothGatt.GATT_FAILURE)
         val g = gatt ?: return
         gatt = null
         // close() releases the client interface. Leaking them (disconnect only)
@@ -411,6 +491,7 @@ class BleTransport(
     private val callback = object : BluetoothGattCallback() {
 
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            if (g !== gatt) return
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED ->
                     pendingConnect.settle(status)
@@ -422,15 +503,22 @@ class BleTransport(
                     pendingDiscover.settle(BluetoothGatt.GATT_FAILURE)
                     pendingMtu.settle(DEFAULT_ATT_MTU)
                     pendingWrite.settle(BluetoothGatt.GATT_FAILURE)
+                    pendingDescriptor.settle(BluetoothGatt.GATT_FAILURE)
+                    if (ready) {
+                        ready = false
+                        onDisconnected?.invoke()
+                    }
                 }
             }
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+            if (g !== gatt) return
             pendingDiscover.settle(status)
         }
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+            if (g !== gatt) return
             pendingMtu.settle(
                 if (status == BluetoothGatt.GATT_SUCCESS) mtu else DEFAULT_ATT_MTU,
             )
@@ -441,7 +529,12 @@ class BleTransport(
             characteristic: BluetoothGattCharacteristic,
             status: Int,
         ) {
+            if (g !== gatt) return
             pendingWrite.settle(status)
+        }
+
+        override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            if (g === gatt) pendingDescriptor.settle(status)
         }
 
         @Deprecated("Superseded by the byte[] overload on API 33+")
@@ -450,17 +543,20 @@ class BleTransport(
             g: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
         ) {
-            characteristic.value?.let { collect(it) }
+            if (g === gatt && characteristic.uuid == notifyCharacteristic?.uuid) characteristic.value?.let { collect(it) }
         }
 
         override fun onCharacteristicChanged(
             g: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
-        ) = collect(value)
+        ) {
+            if (g === gatt && characteristic.uuid == notifyCharacteristic?.uuid) collect(value)
+        }
 
         private fun collect(value: ByteArray) {
-            synchronized(inbox) { if (inbox.size() < INBOX_CAP) inbox.write(value) }
+            if (onNotification != null) onNotification.invoke(value.copyOf())
+            else synchronized(inbox) { if (inbox.size() < INBOX_CAP) inbox.write(value) }
         }
     }
 
@@ -470,6 +566,7 @@ class BleTransport(
         val service: UUID,
         val write: BluetoothGattCharacteristic,
         val notify: BluetoothGattCharacteristic?,
+        val data: BluetoothGattCharacteristic? = null,
     )
 
     companion object {

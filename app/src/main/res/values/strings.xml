@@ -362,4 +362,21 @@
         <item quantity="one">%1$d file is ready to print.</item>
         <item quantity="other">%1$d files are ready to print, and will print one after another.</item>
     </plurals>
+    <string name="mxw01_disconnected">Disconnected — connects when printing</string>
+    <string name="mxw01_connecting">Connecting to MXW01…</string>
+    <string name="mxw01_connected">Connected to MXW01</string>
+    <string name="mxw01_roll_help">Continuous roll · 384 dots wide. PDF pages fit the printable width and keep their proportions. Margins and spacing use dots (about 8 dots per mm). Blank-edge trimming preserves blank space inside a page.</string>
+    <string name="mxw01_intensity">Print intensity: %1$d</string>
+    <string name="mxw01_dithering">Dithering</string>
+    <string name="mxw01_threshold">Hard threshold</string>
+    <string name="mxw01_floyd">Floyd–Steinberg</string>
+    <string name="mxw01_scale">Scale to %1$d%% of printable width</string>
+    <string name="mxw01_margin">Margin (dots)</string>
+    <string name="mxw01_spacing">Page spacing (dots)</string>
+    <string name="mxw01_trim">Trim blank rows at page edges</string>
+    <string name="mxw01_test_title">PocketPrint MXW01</string>
+    <string name="mxw01_test_detail">384-dot raster test</string>
+    <string name="mxw01_address">Bluetooth address</string>
+    <string name="mxw01_ble">MXW01 (BLE)</string>
+    <string name="mxw01_address_help">For an MXW01 only. Enter its Bluetooth address, such as AA:BB:CC:DD:EE:FF. Use the Android device picker to discover it automatically when available.</string>
 </resources>

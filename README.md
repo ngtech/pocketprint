@@ -345,6 +345,18 @@ PocketPrint asks for nothing on first launch. Each permission is requested at th
 needed: Bluetooth when you set up a printer, notifications when you print. If one has been
 refused to the point where Android stops asking, the app says so and offers the way back.
 
+## MXW01 BLE continuous-roll printing (experimental)
+
+The MXW01 has a separate 384-dot raster backend integrated with Android's system
+Print dialog. It uses its proprietary BLE protocol rather than ESC/POS. Select
+MXW01 in Android's Bluetooth device picker, or use **Add printer → MXW01 (BLE)**
+with its Bluetooth address where the picker is unavailable. Printer settings
+include intensity, dithering, scaling, margins, continuous-page spacing and a
+raster test page. See [MXW01 setup, protocol and limitations](docs/MXW01.md) and
+the [physical-printer checklist](docs/MXW01_HARDWARE_TEST.md).
+
+**Hardware validation of this PocketPrint implementation is still required.**
+
 ## Build
 
 ```bash

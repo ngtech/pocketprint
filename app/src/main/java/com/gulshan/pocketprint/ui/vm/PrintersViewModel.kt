@@ -367,6 +367,11 @@ class PrintersViewModel(app: Application) : AndroidViewModel(app) {
         val language = caps.languages.firstOrNull() ?: PrintLanguage.ESC_POS
 
         val bytes = when (language) {
+            PrintLanguage.MXW01 -> com.gulshan.pocketprint.render.Mxw01RasterEncoder.testPage(
+                printer.mxw01,
+                getApplication<android.app.Application>().getString(R.string.mxw01_test_title),
+                getApplication<android.app.Application>().getString(R.string.mxw01_test_detail),
+            )
             PrintLanguage.TSPL -> Tspl.testPage(
                 media, dpi, width, caps.compressedBitmaps, printer.stock,
                 onNoRoomForPicture = {
@@ -415,6 +420,11 @@ class PrintersViewModel(app: Application) : AndroidViewModel(app) {
         kind: ConnectionKind,
         path: String = "/ipp/print",
     ) = viewModelScope.launch {
+        if (kind == ConnectionKind.BLUETOOTH) {
+            val printer = com.gulshan.pocketprint.model.mxw01Printer(host, name)
+            printerRepo.save(printer.keepingSettingsOf(printerRepo.find(printer.id)).copy(address = printer.address))
+            return@launch
+        }
         val address = when (kind) {
             ConnectionKind.RAW9100 -> PrinterAddress.Raw(host, port)
             else -> PrinterAddress.Ipp(host, port, path)
@@ -772,6 +782,10 @@ class PrintersViewModel(app: Application) : AndroidViewModel(app) {
         sensing: MediaSensing? = _setupSensing.value,
         link: BtLink? = _setupLink.value,
     ) = viewModelScope.launch {
+        if (printer.capabilities.preferredLanguage() == PrintLanguage.MXW01) {
+            printerRepo.save(printer.copy(saved = true, exposeToSystem = true).keepingSettingsOf(printerRepo.find(printer.id)))
+            return@launch
+        }
         // Setup is handed a freshly discovered device, which has never heard of
         // what was set on the saved printer of the same id - its stock, whether
         // its images are compressed, which radio it uses. Saving that over the
@@ -893,6 +907,10 @@ class PrintersViewModel(app: Application) : AndroidViewModel(app) {
      * two apps with a hunt in between.
      */
     fun adoptPairedPrinter(printer: Printer) = viewModelScope.launch {
+        if (printer.capabilities.preferredLanguage() == PrintLanguage.MXW01) {
+            printerRepo.save(printer.copy(saved = true, exposeToSystem = true).keepingSettingsOf(printerRepo.find(printer.id)))
+            return@launch
+        }
         printerRepo.save(
             printer.asSavedAfterSetup(printerRepo.find(printer.id), _setupSensing.value, _setupLink.value),
         )

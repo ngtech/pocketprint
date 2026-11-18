@@ -43,6 +43,7 @@ class RenderPipeline(
         // A raw command file goes straight through untouched; re-encoding it
         // would corrupt the very commands the user wanted to send.
         if (source.extension in rawLabelExtensions) {
+            require(target != PrintLanguage.MXW01) { "MXW01 prints PDF and rasterized documents; raw printer command files are unsupported" }
             val file = Spool.copyToCache(context, Uri.parse(source.uri), ".${source.extension}")
             return RenderedDocument(file, target, pageCount = 1)
         }
@@ -78,6 +79,9 @@ class RenderPipeline(
 
         val pdf = toPdf(source, options)
         try {
+            if (target == PrintLanguage.MXW01) {
+                return@withContext Mxw01RasterEncoder.preview(context, pdf.file, printer.mxw01, options)
+            }
             val width = printer.capabilities.rasterWidthDots ?: 576
             val dpi = printer.capabilities.resolutionsDpi.firstOrNull() ?: 203
             var preview: Bitmap? = null
@@ -226,6 +230,11 @@ class RenderPipeline(
 
         return when (target) {
             PrintLanguage.PDF -> pdf
+            PrintLanguage.MXW01 -> try {
+                Mxw01RasterEncoder.fromPdf(context, pdf.file, printer.mxw01, streamOptions)
+            } finally {
+                pdf.cleanupIfTemporary()
+            }
 
             PrintLanguage.PWG_RASTER -> PwgRasterEncoder.fromPdf(
                 context, pdf.file, streamOptions, printer.capabilities.supportsColor,

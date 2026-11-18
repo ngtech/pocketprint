@@ -121,6 +121,15 @@ class PrinterAutoSetup(private val context: Context) {
         stock: MediaSize? = null,
         printTestLabel: Boolean = true,
     ): Flow<SetupProgress> = flow {
+        // MXW01 is identified at discovery; generic probing would send alien dialect commands.
+        if (printer.capabilities.preferredLanguage() == PrintLanguage.MXW01) {
+            emit(SetupProgress(
+                steps = initialSteps().map { it.copy(state = StepState.SKIPPED) },
+                finished = true,
+                printer = printer.copy(saved = true, exposeToSystem = true),
+            ))
+            return@flow
+        }
         var steps = initialSteps()
 
         suspend fun push(
@@ -436,4 +445,5 @@ internal fun setupTestLabel(
 }
 
 /** Auto-setup only makes sense for the Bluetooth thermal printers. */
-fun Printer.supportsAutoSetup(): Boolean = address is PrinterAddress.Bluetooth
+fun Printer.supportsAutoSetup(): Boolean = address is PrinterAddress.Bluetooth &&
+    capabilities.preferredLanguage() != PrintLanguage.MXW01

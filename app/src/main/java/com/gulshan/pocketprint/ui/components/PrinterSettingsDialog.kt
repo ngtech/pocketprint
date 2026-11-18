@@ -13,6 +13,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Slider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +39,11 @@ import com.gulshan.pocketprint.ipp.PrinterTrust
 import com.gulshan.pocketprint.model.PrinterAddress
 import com.gulshan.pocketprint.model.linkAfterSettings
 import com.gulshan.pocketprint.transport.TscSdk
+import com.gulshan.pocketprint.model.Mxw01Dither
+import com.gulshan.pocketprint.model.Mxw01Settings
+import com.gulshan.pocketprint.model.PrinterCapabilities
+import com.gulshan.pocketprint.transport.Mxw01Connection
+import com.gulshan.pocketprint.transport.Mxw01Connections
 
 /**
  * Lets the user correct what the app guessed about a printer.
@@ -94,6 +101,15 @@ fun PrinterSettingsDialog(
     var darkness by rememberSaveable { mutableStateOf(printer.stock.darkness) }
     var speed by rememberSaveable { mutableStateOf(printer.stock.speedIps) }
     var trimBlank by rememberSaveable { mutableStateOf(printer.stock.trimBlank) }
+    var mxwIntensity by rememberSaveable { mutableStateOf(printer.mxw01.intensity) }
+    var mxwDither by rememberSaveable(stateSaver = enumSaver(Mxw01Dither.entries.toList())) {
+        mutableStateOf(printer.mxw01.dither)
+    }
+    var mxwScale by rememberSaveable { mutableStateOf(printer.mxw01.scalePercent) }
+    var mxwMargin by rememberSaveable { mutableStateOf(printer.mxw01.marginDots) }
+    var mxwTrim by rememberSaveable { mutableStateOf(printer.mxw01.trimBlank) }
+    var mxwSpacing by rememberSaveable { mutableStateOf(printer.mxw01.pageSpacingDots) }
+    val isMxw01 = language == PrintLanguage.MXW01
 
     val isLabelPrinter = language == PrintLanguage.TSPL || language == PrintLanguage.ZPL
     val sizes = (MediaSize.ALL + extraSizes).distinctBy { it.id }
@@ -115,11 +131,12 @@ fun PrinterSettingsDialog(
             printer.address
         } else {
             bluetoothAddress.copy(
-                link = linkAfterSettings(bluetoothAddress.link, viaTscLibrary, TscSdk.isBundled),
+                link = if (isMxw01) BtLink.BLE else linkAfterSettings(bluetoothAddress.link, viaTscLibrary, TscSdk.isBundled),
             )
         },
-        stock = stock(),
-        capabilities = printer.capabilities.copy(
+        stock = if (isMxw01) stock().copy(sensing = MediaSensing.CONTINUOUS, gapMm = 0f) else stock(),
+        mxw01 = Mxw01Settings(mxwIntensity, mxwDither, mxwScale, mxwMargin, mxwTrim, mxwSpacing).validated(),
+        capabilities = if (isMxw01) PrinterCapabilities.MXW01 else printer.capabilities.copy(
             languages = listOf(language),
             mediaSizes = (listOf(media) + extraSizes + printer.capabilities.mediaSizes)
                 .distinctBy { it.id },
@@ -149,12 +166,13 @@ fun PrinterSettingsDialog(
 
                 Text(stringResource(R.string.printer_language), style = MaterialTheme.typography.labelMedium)
                 ChipRow(
-                    items = listOf(
+                    items = listOfNotNull(
                         PrintLanguage.TSPL,
                         PrintLanguage.ZPL,
                         PrintLanguage.ESC_POS,
                         PrintLanguage.PCL,
                         PrintLanguage.PDF,
+                        PrintLanguage.MXW01.takeIf { bluetoothAddress != null },
                     ),
                     selected = language,
                     label = {
@@ -163,6 +181,7 @@ fun PrinterSettingsDialog(
                             PrintLanguage.ZPL -> "ZPL"
                             PrintLanguage.ESC_POS -> "ESC/POS"
                             PrintLanguage.PCL -> "PCL"
+                            PrintLanguage.MXW01 -> "MXW01"
                             else -> "PDF"
                         }
                     },
@@ -174,6 +193,32 @@ fun PrinterSettingsDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
+                if (isMxw01) {
+                    val connection by Mxw01Connections.observe(bluetoothAddress?.mac.orEmpty()).collectAsState()
+                    Text(stringResource(when (connection) {
+                        Mxw01Connection.DISCONNECTED -> R.string.mxw01_disconnected
+                        Mxw01Connection.CONNECTING -> R.string.mxw01_connecting
+                        Mxw01Connection.CONNECTED -> R.string.mxw01_connected
+                    }))
+                    Text(stringResource(R.string.mxw01_roll_help), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.mxw01_intensity, mxwIntensity))
+                    Slider(value = mxwIntensity.toFloat(), onValueChange = { mxwIntensity = it.toInt() }, valueRange = 0f..150f, steps = 149)
+                    Text(stringResource(R.string.mxw01_dithering), style = MaterialTheme.typography.labelMedium)
+                    ChipRow(
+                        items = Mxw01Dither.entries.toList(), selected = mxwDither,
+                        label = { context.getString(if (it == Mxw01Dither.THRESHOLD) R.string.mxw01_threshold else R.string.mxw01_floyd) },
+                        onSelect = { mxwDither = it },
+                    )
+                    Text(stringResource(R.string.mxw01_scale, mxwScale))
+                    Slider(value = mxwScale.toFloat(), onValueChange = { mxwScale = it.toInt() }, valueRange = 25f..100f, steps = 74)
+                    Stepper(stringResource(R.string.mxw01_margin), mxwMargin, 0..64) { mxwMargin = it }
+                    Stepper(stringResource(R.string.mxw01_spacing), mxwSpacing, 0..203) { mxwSpacing = it }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.mxw01_trim), modifier = Modifier.weight(1f))
+                        Switch(checked = mxwTrim, onCheckedChange = { mxwTrim = it })
+                    }
+                }
+                if (!isMxw01) {
                 Text(stringResource(R.string.printer_default_stock), style = MaterialTheme.typography.labelMedium)
                 ChipRow(
                     items = sizes,
@@ -218,6 +263,7 @@ fun PrinterSettingsDialog(
                     ) { Text(stringResource(R.string.printer_custom_add)) }
                 }
 
+                }
                 if (isLabelPrinter) {
                     Text(stringResource(R.string.printer_stock_section), style = MaterialTheme.typography.labelMedium)
                     ChipRow(
@@ -345,6 +391,7 @@ fun PrinterSettingsDialog(
                     )
                 }
 
+                if (!isMxw01) {
                 Text(stringResource(R.string.printer_resolution), style = MaterialTheme.typography.labelMedium)
                 ChipRow(
                     items = listOf(180, 203, 300, 600),
@@ -369,6 +416,7 @@ fun PrinterSettingsDialog(
                 // Only an IPPS printer has a certificate to talk about. The pin
                 // is shown so it can be checked against the printer's own
                 // status page, which is the whole basis for trusting it.
+                }
                 (printer.address as? PrinterAddress.Ipp)?.takeIf { it.secure }?.let { ipps ->
                     Text(
                         stringResource(R.string.printer_certificate_section),

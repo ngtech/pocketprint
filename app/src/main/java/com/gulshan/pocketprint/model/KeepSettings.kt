@@ -48,6 +48,7 @@ fun Printer.keepingSettingsOf(existing: Printer?): Printer {
     return copy(
         address = if (sameBluetoothDevice) theirs else mine,
         stock = existing.stock,
+        mxw01 = existing.mxw01,
         capabilities = capabilities.copy(
             mediaSizes = capabilities.mediaSizes + customSizes,
             compressedBitmaps = existing.capabilities.compressedBitmaps,

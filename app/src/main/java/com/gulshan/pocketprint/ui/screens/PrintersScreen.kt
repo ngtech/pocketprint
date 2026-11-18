@@ -766,7 +766,8 @@ fun PrintersScreen(viewModel: PrintersViewModel) {
         AddPrinterDialog(
             onDismiss = { showAddDialog = false },
             onAdd = { name, host, port, kind ->
-                viewModel.addManualPrinter(name, host, port, kind)
+                val wanted = if (kind == ConnectionKind.BLUETOOTH) AppPermissions.bluetooth else emptyList()
+                permissions.ensure(wanted) { viewModel.addManualPrinter(name, host, port, kind) }
                 showAddDialog = false
             },
         )
@@ -870,18 +871,18 @@ private fun AddPrinterDialog(
                 OutlinedTextField(
                     value = host,
                     onValueChange = { host = it },
-                    label = { Text(stringResource(R.string.add_printer_host)) },
+                    label = { Text(stringResource(if (kind == ConnectionKind.BLUETOOTH) R.string.mxw01_address else R.string.add_printer_host)) },
                     singleLine = true,
                 )
                 ChipRow(
-                    items = listOf(ConnectionKind.IPP, ConnectionKind.RAW9100),
+                    items = listOf(ConnectionKind.IPP, ConnectionKind.RAW9100, ConnectionKind.BLUETOOTH),
                     selected = kind,
                     label = {
                         context.getString(
-                            if (it == ConnectionKind.IPP) {
-                                R.string.add_printer_ipp
-                            } else {
-                                R.string.add_printer_raw
+                            when (it) {
+                                ConnectionKind.IPP -> R.string.add_printer_ipp
+                                ConnectionKind.BLUETOOTH -> R.string.mxw01_ble
+                                else -> R.string.add_printer_raw
                             },
                         )
                     },
@@ -890,17 +891,21 @@ private fun AddPrinterDialog(
                         port = if (it == ConnectionKind.IPP) "631" else "9100"
                     },
                 )
+                if (kind != ConnectionKind.BLUETOOTH) {
                 OutlinedTextField(
                     value = port,
                     onValueChange = { port = it.filter(Char::isDigit).take(5) },
                     label = { Text(stringResource(R.string.add_printer_port)) },
                     singleLine = true,
                 )
+                } else {
+                    Text(stringResource(R.string.mxw01_address_help), style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {
             TextButton(
-                enabled = host.isNotBlank() && port.isNotBlank(),
+                enabled = if (kind == ConnectionKind.BLUETOOTH) com.gulshan.pocketprint.model.isBluetoothMac(host) else host.isNotBlank() && port.isNotBlank(),
                 onClick = { onAdd(name, host.trim(), port.toIntOrNull() ?: 631, kind) },
             ) { Text(stringResource(R.string.add_printer_add)) }
         },

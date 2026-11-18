@@ -4,6 +4,7 @@ import android.content.Context
 import com.gulshan.pocketprint.model.BtLink
 import com.gulshan.pocketprint.model.Printer
 import com.gulshan.pocketprint.model.PrinterAddress
+import com.gulshan.pocketprint.model.PrintLanguage
 
 /**
  * Maps a printer's address onto the transport that can reach it. IPP printers
@@ -14,8 +15,13 @@ object TransportFactory {
 
     fun requiresIpp(printer: Printer): Boolean = printer.address is PrinterAddress.Ipp
 
-    fun create(context: Context, printer: Printer): PrinterTransport =
-        when (val a = printer.address) {
+    fun create(context: Context, printer: Printer): PrinterTransport {
+        if (printer.capabilities.preferredLanguage() == PrintLanguage.MXW01) {
+            val address = printer.address as? PrinterAddress.Bluetooth
+                ?: throw TransportException("MXW01 requires Bluetooth LE")
+            return Mxw01Transport(context.applicationContext, address, printer.mxw01)
+        }
+        return when (val a = printer.address) {
             is PrinterAddress.Raw -> RawSocketTransport(a, context = context.applicationContext)
             // A Bluetooth printer is reached over RFCOMM or over GATT depending
             // on its radio; AUTO probes and falls back so an LE-only printer no
@@ -41,4 +47,5 @@ object TransportFactory {
                 "IPP printers are driven through IppClient, not a byte transport",
             )
         }
+    }
 }

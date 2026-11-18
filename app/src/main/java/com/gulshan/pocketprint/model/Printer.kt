@@ -41,11 +41,12 @@ enum class PrintLanguage(val mimeType: String) {
     ESC_POS("application/octet-stream"),
     TSPL("application/octet-stream"),
     ZPL("application/octet-stream"),
+    MXW01("application/octet-stream"),
     PLAIN_TEXT("text/plain");
 
     /** Raster dialects are driven by bitmaps, not by a page-layout document. */
     val isRaster: Boolean
-        get() = this == PWG_RASTER || this == ESC_POS || this == TSPL || this == ZPL
+        get() = this == PWG_RASTER || this == ESC_POS || this == TSPL || this == ZPL || this == MXW01
 }
 
 @Serializable
@@ -226,6 +227,9 @@ data class MediaSize(
         val RECEIPT_80 = MediaSize("om_receipt-80_80x297mm", "Receipt 80 mm", mm(80.0), mm(297.0))
         val RECEIPT_58 = MediaSize("om_receipt-58_58x297mm", "Receipt 58 mm", mm(58.0), mm(297.0))
 
+        // The dialog needs a finite layout page; output height follows the PDF on a continuous roll.
+        val MXW01_ROLL = MediaSize("mxw01_roll_48x297mm", "MXW01 continuous roll (48 mm printable)", mm(48.0), mm(297.0))
+
         val PAPER = listOf(A4, LETTER, LEGAL, A5, PHOTO_4X6)
 
         /**
@@ -262,7 +266,7 @@ data class MediaSize(
          * not show.
          */
         val DEFAULT_LABEL = LABEL_75X75
-        val ALL = PAPER + LABELS
+        val ALL = PAPER + LABELS + MXW01_ROLL
 
         fun byId(id: String?): MediaSize? = ALL.firstOrNull { it.id == id }
 
@@ -383,6 +387,13 @@ data class PrinterCapabilities(
     companion object {
         val UNKNOWN_NETWORK = PrinterCapabilities()
 
+        val MXW01 = PrinterCapabilities(
+            languages = listOf(PrintLanguage.MXW01),
+            mediaSizes = listOf(MediaSize.MXW01_ROLL) + MediaSize.PAPER,
+            resolutionsDpi = listOf(203),
+            rasterWidthDots = 384,
+        )
+
         /** Sensible default for an unqueried 80 mm ESC/POS receipt printer. */
         val ESC_POS_80MM = PrinterCapabilities(
             languages = listOf(PrintLanguage.ESC_POS),
@@ -434,6 +445,7 @@ data class Printer(
      * sensor, and this records what it saw.
      */
     val testPrintConfirmed: Boolean = false,
+    val mxw01: Mxw01Settings = Mxw01Settings(),
 ) {
     val kind: ConnectionKind get() = address.kind
 

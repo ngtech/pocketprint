@@ -83,16 +83,17 @@ fun LabelScreen(viewModel: PrintersViewModel) {
     // Resolved from the saved list each time, so a printer deleted while this
     // screen was in the background simply deselects rather than lingering as a
     // stale copy of a printer that no longer exists.
-    val selectedPrinter = saved.firstOrNull { it.id == selectedPrinterId }
-
     val allLanguages = listOf(PrintLanguage.TSPL, PrintLanguage.ZPL, PrintLanguage.ESC_POS)
+    val selectedPrinter = saved.firstOrNull {
+        it.id == selectedPrinterId && it.capabilities.languages.any { language -> language in allLanguages }
+    }
     val languageChoices = selectedPrinter?.capabilities?.languages
         ?.filter { it in allLanguages }
         ?.takeIf { it.isNotEmpty() }
         ?: allLanguages
 
     val labelPrinters = saved.filter {
-        it.capabilities.languages.any { l -> l.isRaster && l != PrintLanguage.PWG_RASTER }
+        it.capabilities.languages.any { l -> l in allLanguages }
     }
 
     Column(
@@ -176,7 +177,7 @@ fun LabelScreen(viewModel: PrintersViewModel) {
         // dialect follows whatever the chosen printer advertises.
         LaunchedEffect(selectedPrinter) {
             selectedPrinter?.capabilities?.languages
-                ?.firstOrNull { it.isRaster && it != PrintLanguage.PWG_RASTER }
+                ?.firstOrNull { it in allLanguages }
                 ?.let { language = it }
             media = sizeWhenPrinterSelected(media, sizeChosen, selectedPrinter)
             viewModel.clearLabelStatus()
