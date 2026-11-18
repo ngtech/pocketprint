@@ -1,6 +1,7 @@
 package com.gulshan.pocketprint.transport
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -45,7 +46,9 @@ suspend fun <T> guardAgainstStall(
 
     // Default, not IO: this must have a thread of its own while the write sits
     // in a syscall on one of IO's.
-    val watcher = launch(Dispatchers.Default) {
+    // Enter the cancellation handler before body can block. With a dispatched
+    // start, cancellation may prevent the watcher from ever entering its try.
+    val watcher = launch(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
         val tick = (stallMs / 4).coerceIn(100L, 5_000L)
         try {
             while (isActive) {

@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.IntentSender
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.annotation.ChecksSdkIntAtLeast
 import android.bluetooth.BluetoothAdapter
 import com.gulshan.pocketprint.model.BtLink
 import com.gulshan.pocketprint.model.Printer
@@ -42,6 +43,7 @@ object CompanionPairing {
 
     private const val TAG = "CompanionPairing"
 
+    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.O)
     fun isSupported(context: Context): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             context.packageManager.hasSystemFeature(

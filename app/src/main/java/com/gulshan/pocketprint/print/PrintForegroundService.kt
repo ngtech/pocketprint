@@ -1,5 +1,9 @@
 package com.gulshan.pocketprint.print
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -518,6 +522,9 @@ class PrintForegroundService : Service() {
             // torn down with the service, which would erase the outcome.
             val id = if (ongoing) NOTIFICATION_ID else RESULT_NOTIFICATION_ID
             if (!ongoing) detachForegroundNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) return@runCatching
             NotificationManagerCompat.from(this)
                 .notify(id, buildNotification(title, text, progress, ongoing, detail))
         }
