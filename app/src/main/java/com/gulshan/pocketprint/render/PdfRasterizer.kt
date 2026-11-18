@@ -128,6 +128,7 @@ object PdfRasterizer {
         targetWidthPx: Int? = null,
         pageRange: IntRange? = null,
         maxBandPixels: Int = 2_000_000,
+        rotateCounterClockwise: Boolean = false,
         onPageStart: (index: Int, widthPx: Int, heightPx: Int) -> Unit,
         onBand: (bitmap: Bitmap, yOffset: Int, rows: Int) -> Unit,
         onPageEnd: (index: Int) -> Unit = {},
@@ -138,10 +139,12 @@ object PdfRasterizer {
                 if (pageRange != null && (i + 1) !in pageRange) continue
 
                 renderer.openPage(i).use { page ->
+                    val sourceWidth = if (rotateCounterClockwise) page.height else page.width
+                    val sourceHeight = if (rotateCounterClockwise) page.width else page.height
                     val widthPx = (targetWidthPx
-                        ?: Math.round(page.width * dpi / 72f)).coerceAtLeast(1)
+                        ?: Math.round(sourceWidth * dpi / 72f)).coerceAtLeast(1)
                     val heightPx = Math.round(
-                        page.height.toFloat() * widthPx / page.width.toFloat(),
+                        sourceHeight.toFloat() * widthPx / sourceWidth.toFloat(),
                     ).coerceAtLeast(1)
 
                     onPageStart(i, widthPx, heightPx)
@@ -149,8 +152,8 @@ object PdfRasterizer {
                     val bandRows = (maxBandPixels / widthPx).coerceIn(1, heightPx)
                     val band = Bitmap.createBitmap(widthPx, bandRows, Bitmap.Config.ARGB_8888)
                     val canvas = Canvas(band)
-                    val scaleX = widthPx.toFloat() / page.width
-                    val scaleY = heightPx.toFloat() / page.height
+                    val scaleX = widthPx.toFloat() / sourceWidth
+                    val scaleY = heightPx.toFloat() / sourceHeight
 
                     try {
                         var y = 0
@@ -162,8 +165,16 @@ object PdfRasterizer {
 
                             // Shift the page up so this band lands at the bitmap origin.
                             val matrix = Matrix().apply {
-                                setScale(scaleX, scaleY)
-                                postTranslate(0f, -y.toFloat())
+                                if (rotateCounterClockwise) {
+                                    setValues(floatArrayOf(
+                                        0f, scaleX, 0f,
+                                        -scaleY, 0f, heightPx - y.toFloat(),
+                                        0f, 0f, 1f,
+                                    ))
+                                } else {
+                                    setScale(scaleX, scaleY)
+                                    postTranslate(0f, -y.toFloat())
+                                }
                             }
                             page.render(
                                 band, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_PRINT,

@@ -2,6 +2,7 @@ package com.gulshan.pocketprint.mxw01
 
 import com.gulshan.pocketprint.model.Mxw01Dither
 import com.gulshan.pocketprint.model.Mxw01Settings
+import com.gulshan.pocketprint.model.Mxw01StripDirection
 
 /** Fit each strip to printable width; the union of strips covers the whole page. */
 class Mxw01Layout(settings: Mxw01Settings) {
@@ -12,6 +13,12 @@ class Mxw01Layout(settings: Mxw01Settings) {
     val overlap = if (strips > 1 && config.stripOverlap) minOf(OVERLAP_DOTS, width - 1) else 0
     val pageWidth = width + (strips - 1) * (width - overlap)
     val pageRowBytes = (pageWidth + 7) / 8
+    // Rotate horizontal sections onto the narrow head: normalized left-to-right
+    // is original top-to-bottom. Turn each printed piece clockwise to assemble.
+    val rotatePage = strips > 1 && config.stripDirection == Mxw01StripDirection.HORIZONTAL
+    val hasGuides = strips > 1 && config.stripGuides
+    val guidePadding = if (hasGuides) GUIDE_PADDING_DOTS else 0
+    val contentWidth = pageWidth - 2 * guidePadding
 
     fun stripStart(index: Int): Int {
         require(index in 0 until strips)
@@ -20,6 +27,7 @@ class Mxw01Layout(settings: Mxw01Settings) {
 
     companion object {
         const val OVERLAP_DOTS = 16 // Approximately 2 mm at the MXW01's nominal 203 dpi.
+        const val GUIDE_PADDING_DOTS = 12 // Keeps guides outside the original PDF content.
     }
 }
 

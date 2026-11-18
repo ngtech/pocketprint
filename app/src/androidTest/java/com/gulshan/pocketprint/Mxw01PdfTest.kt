@@ -24,7 +24,7 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class Mxw01PdfTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
-    private val settings = Mxw01Settings(dither = Mxw01Dither.THRESHOLD, marginDots = 0, pageSpacingDots = 7)
+    private val settings = Mxw01Settings(dither = Mxw01Dither.THRESHOLD, marginDots = 0, pageSpacingDots = 7, stripGuides = false)
 
     private fun pdf(pages: Int = 2, height: Int = 300, gradient: Boolean = false): File {
         val file = File.createTempFile("mxw01_input_", ".pdf", context.cacheDir)

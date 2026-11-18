@@ -9,6 +9,7 @@ import com.gulshan.pocketprint.model.Mxw01Settings
 import com.gulshan.pocketprint.model.PrintLanguage
 import com.gulshan.pocketprint.model.PrintOptions
 import com.gulshan.pocketprint.mxw01.Mxw01Layout
+import com.gulshan.pocketprint.mxw01.Mxw01PageGuides
 import com.gulshan.pocketprint.mxw01.Mxw01Protocol
 import com.gulshan.pocketprint.mxw01.Mxw01Raster
 import com.gulshan.pocketprint.mxw01.Mxw01RowPacker
@@ -46,38 +47,50 @@ object Mxw01RasterEncoder {
                     var height = 0
                     var firstInk = -1
                     var endInk = 0
-                    val pixels = IntArray(layout.pageWidth)
+                    var guides: Mxw01PageGuides? = null
+                    val pixels = IntArray(layout.pageWidth) { Color.WHITE }
                     val sourceRow = ByteArray(layout.pageRowBytes)
+                    fun writeRow(row: ByteArray, y: Int) {
+                        job.ensureActive()
+                        guides?.drawRow(row, y)
+                        pageRaster.write(row)
+                        if (row.any { it != 0.toByte() }) {
+                            if (firstInk < 0) firstInk = y
+                            endInk = y + 1
+                        }
+                    }
                     repeat(options.copies.coerceAtLeast(1)) {
                         PdfRasterizer.forEachPageBanded(
                             pdf,
-                            targetWidthPx = layout.pageWidth,
+                            targetWidthPx = layout.contentWidth,
                             pageRange = options.pageRange,
                             maxBandPixels = Mxw01Protocol.WIDTH * 128,
+                            rotateCounterClockwise = layout.rotatePage,
                             onPageStart = { _, _, pageHeight ->
                                 job.ensureActive()
                                 pageRaster.setLength(0)
                                 pageRaster.seek(0)
-                                height = pageHeight
+                                guides = if (layout.hasGuides) Mxw01PageGuides(layout, pageHeight) else null
+                                height = guides?.height ?: pageHeight
                                 firstInk = -1
                                 endInk = 0
                                 packer = Mxw01RowPacker(layout.pageWidth, config.dither)
+                                repeat(layout.guidePadding) { y -> writeRow(ByteArray(layout.pageRowBytes), y) }
                             },
                             onBand = { bitmap, offset, rows ->
                                 for (y in 0 until rows) {
                                     job.ensureActive()
-                                    bitmap.getPixels(pixels, 0, layout.pageWidth, 0, y, layout.pageWidth, 1)
+                                    bitmap.getPixels(pixels, layout.guidePadding, layout.contentWidth, 0, y, layout.contentWidth, 1)
                                     val row = packer.row(pixels)
-                                    pageRaster.write(row)
-                                    if (row.any { it != 0.toByte() }) {
-                                        if (firstInk < 0) firstInk = offset + y
-                                        endInk = offset + y + 1
-                                    }
+                                    writeRow(row, layout.guidePadding + offset + y)
                                 }
                             },
                             onPageEnd = {
-                                val start = if (config.trimBlank) firstInk.coerceAtLeast(0) else 0
-                                val count = if (config.trimBlank) (endInk - start).coerceAtLeast(0) else height
+                                for (y in height - layout.guidePadding until height) writeRow(ByteArray(layout.pageRowBytes), y)
+                                // Guides represent the original page bounds, including its blank edges.
+                                val trim = config.trimBlank && !layout.hasGuides
+                                val start = if (trim) firstInk.coerceAtLeast(0) else 0
+                                val count = if (trim) (endInk - start).coerceAtLeast(0) else height
                                 // All strips use the same vertical trim bounds, preserving alignment.
                                 for (strip in 0 until layout.strips) {
                                     pageRaster.seek(start.toLong() * layout.pageRowBytes)
@@ -152,7 +165,7 @@ object Mxw01RasterEncoder {
     }
 
     fun testPage(settings: Mxw01Settings, title: String, detail: String): ByteArray {
-        val config = settings.validated()
+        val config = settings.validated().copy(splitIntoStrips = false)
         val layout = Mxw01Layout(config)
         val scale = layout.width / Mxw01Protocol.WIDTH.toFloat()
         val bitmap = Bitmap.createBitmap(layout.width, Math.round(220 * scale).coerceAtLeast(1), Bitmap.Config.ARGB_8888)

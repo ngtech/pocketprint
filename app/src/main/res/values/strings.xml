@@ -379,10 +379,17 @@
     <string name="mxw01_address">Bluetooth address</string>
     <string name="mxw01_ble">MXW01 (BLE)</string>
     <string name="mxw01_address_help">For an MXW01 only. Enter its Bluetooth address, such as AA:BB:CC:DD:EE:FF. Use the Android device picker to discover it automatically when available.</string>
-    <string name="mxw01_split_strips">Split pages into vertical strips</string>
+    <string name="mxw01_split_strips">Split pages into strips</string>
+    <string name="mxw01_strip_direction">Strip direction</string>
+    <string name="mxw01_vertical">Vertical</string>
+    <string name="mxw01_horizontal">Horizontal</string>
     <string name="mxw01_strip_count">Strips per page</string>
     <string name="mxw01_strip_overlap">Overlap adjoining strips</string>
     <string name="mxw01_strip_help">Prints left to right as separate sections of the roll. Each strip fits the printable width and keeps the same page height.</string>
-    <string name="mxw01_strip_overlap_help">Prints left to right, repeating about 2 mm at each join for alignment. Each strip keeps the same page height.</string>
+    <string name="mxw01_horizontal_help">Prints top to bottom, with each horizontal section sideways on the roll. Turn each piece clockwise to assemble the page.</string>
+    <string name="mxw01_strip_overlap_help">Repeats about 2 mm at each join to help align adjoining strips.</string>
+    <string name="mxw01_strip_guides">Original page border and alignment ticks</string>
+    <string name="mxw01_strip_guides_help">Frames the original page, with ticks at both edges of each overlap. Guides sit outside the content; internal strip cuts have no border.</string>
+    <string name="mxw01_guides_keep_edges">Keeps the original page edges while guides are enabled.</string>
     <string name="mxw01_strip_spacing">Page / strip spacing (dots)</string>
 </resources>

@@ -88,10 +88,11 @@ There are no cutter, gap-sensing, calibration, feed/retract, speed or battery
 percentage controls for MXW01. Intensity is a protocol byte exposed only over
 the documented/tested application range **0–150**, default 93 (`0x5D`).
 
-### Split a large page into vertical strips
+### Split a large page into strips
 
-Open the MXW01's **Printer settings**, turn on **Split pages into vertical
-strips**, choose **Strips per page** (2–8; default 3), and save. For example,
+Open the MXW01's **Printer settings**, turn on **Split pages into strips**,
+choose **Vertical** or **Horizontal**, set **Strips per page** (2–8; default 3),
+and save. For example,
 an A5 page can become three strips instead of being reduced to a single narrow
 image. The mode is off by default, including for previously saved printers.
 In Android's print dialog, choose **A5** (or **A4**) as the document layout size
@@ -103,11 +104,31 @@ sections without repeated content. The complete page is resized proportionally
 to the combined width. Strip count, scaling and margins determine its final
 assembled size. Each strip then fits the printer's 384-dot head.
 
-Strips print **left to right**, one complete vertical section at a time, followed
-by the next PDF page. Copies repeat the document in that order. Page / strip
+Vertical strips print **left to right**, one complete vertical section at a time.
+Horizontal strips print **top to bottom**, with each section rotated
+counterclockwise onto the narrow roll. Turn each printed piece **clockwise**
+to assemble the original page. The complete page is fitted to the combined
+strip width (horizontal mode uses the rotated page's width), preserving its
+proportions. The next PDF page follows all sections of the previous one.
+Copies repeat the document in that order. Page / strip
 spacing inserts the selected number of white rows between sections; cut them
 manually. No cutter commands are sent.
 Trim the blank paper edges as needed when assembling the strips.
+
+**Original page border and alignment ticks** is on by default in strip mode.
+It draws one frame around the original A4/A5/PDF page before splitting, not a
+box around each strip. Vertical sections share the original top/bottom lines;
+only the outermost sections carry the original left/right lines. Horizontal
+sections share the original left/right lines; only the first/last sections
+carry the original top/bottom lines after rotating the pieces for assembly.
+
+Ticks extend outward at both edges of every repeated overlap. Match those
+ticks on neighboring pieces; the repeated image pixels also match exactly.
+With overlap off, there are no overlap ticks. A 12-dot gutter (about 1.5 mm)
+is reserved around the content for the one-dot frame and eight-dot ticks, so
+guides never cover document content. Original blank page edges are preserved
+while guides are on; blank-edge trimming is disabled in settings for that mode.
+Turn guides off to use the previous borderless strips and optional trimming.
 
 All strips share the same vertical scale and trim bounds, even if one is blank
 or contains text at a different height. Blank strips are retained so the page
@@ -117,7 +138,7 @@ bounded render bands and disk spool are used for the wider page.
 
 The built-in test page remains a single head-width diagnostic. Exercise strip
 mode with an actual document and its preview. Physical strip assembly and
-overlap alignment still need testing on the printer; the earlier user-reported
+overlap alignment, page guides and horizontal strips still need testing on the printer; the earlier user-reported
 test-page and Gmail results predate this mode.
 
 ## Protocol and architecture

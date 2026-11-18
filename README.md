@@ -355,9 +355,11 @@ include intensity, dithering, scaling, margins, continuous-page spacing and a
 raster test page. See [MXW01 setup, protocol and limitations](docs/MXW01.md) and
 the [physical-printer checklist](docs/MXW01_HARDWARE_TEST.md).
 
-Printer settings also offer optional **vertical strips** with a count of 2–8
-and a separate **overlap** toggle, for printing a large page across several
-head-width sections. Strip splitting is off by default.
+Printer settings also offer optional **vertical or horizontal strips** with a
+count of 2–8 and a separate **overlap** toggle. Original-page guides add one outer
+frame and matching overlap ticks without covering document content. Horizontal
+sections print sideways in top-to-bottom order; turn each piece clockwise to
+assemble. Strip splitting is off by default.
 
 **User-reported hardware validation (2026-11-18):** the supplied PocketPrint debug
 APK successfully printed its test page and a print from Gmail on an MXW01.

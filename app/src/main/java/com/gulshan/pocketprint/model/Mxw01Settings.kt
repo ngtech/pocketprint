@@ -5,6 +5,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class Mxw01Dither { THRESHOLD, FLOYD_STEINBERG }
 
+@Serializable
+enum class Mxw01StripDirection { VERTICAL, HORIZONTAL }
+
 /** MXW01 uses a continuous roll and a fixed 384-dot head. Values are wire units. */
 @Serializable
 data class Mxw01Settings(
@@ -17,6 +20,8 @@ data class Mxw01Settings(
     val splitIntoStrips: Boolean = false,
     val stripCount: Int = 3,
     val stripOverlap: Boolean = true,
+    val stripDirection: Mxw01StripDirection = Mxw01StripDirection.VERTICAL,
+    val stripGuides: Boolean = true,
 ) {
     fun validated() = copy(
         intensity = intensity.coerceIn(0, 150),

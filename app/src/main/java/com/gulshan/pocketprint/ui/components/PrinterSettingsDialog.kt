@@ -40,6 +40,7 @@ import com.gulshan.pocketprint.model.PrinterAddress
 import com.gulshan.pocketprint.model.linkAfterSettings
 import com.gulshan.pocketprint.transport.TscSdk
 import com.gulshan.pocketprint.model.Mxw01Dither
+import com.gulshan.pocketprint.model.Mxw01StripDirection
 import com.gulshan.pocketprint.model.PrinterCapabilities
 import com.gulshan.pocketprint.transport.Mxw01Connection
 import com.gulshan.pocketprint.transport.Mxw01Connections
@@ -111,6 +112,10 @@ fun PrinterSettingsDialog(
     var mxwSplit by rememberSaveable { mutableStateOf(printer.mxw01.splitIntoStrips) }
     var mxwStripCount by rememberSaveable { mutableStateOf(printer.mxw01.stripCount) }
     var mxwStripOverlap by rememberSaveable { mutableStateOf(printer.mxw01.stripOverlap) }
+    var mxwStripDirection by rememberSaveable(stateSaver = enumSaver(Mxw01StripDirection.entries.toList())) {
+        mutableStateOf(printer.mxw01.stripDirection)
+    }
+    var mxwStripGuides by rememberSaveable { mutableStateOf(printer.mxw01.stripGuides) }
     val isMxw01 = language == PrintLanguage.MXW01
 
     val isLabelPrinter = language == PrintLanguage.TSPL || language == PrintLanguage.ZPL
@@ -141,6 +146,7 @@ fun PrinterSettingsDialog(
             intensity = mxwIntensity, dither = mxwDither, scalePercent = mxwScale,
             marginDots = mxwMargin, trimBlank = mxwTrim, pageSpacingDots = mxwSpacing,
             splitIntoStrips = mxwSplit, stripCount = mxwStripCount, stripOverlap = mxwStripOverlap,
+            stripDirection = mxwStripDirection, stripGuides = mxwStripGuides,
         ).validated(),
         capabilities = if (isMxw01) PrinterCapabilities.MXW01 else printer.capabilities.copy(
             languages = listOf(language),
@@ -212,15 +218,27 @@ fun PrinterSettingsDialog(
                         Switch(checked = mxwSplit, onCheckedChange = { mxwSplit = it })
                     }
                     if (mxwSplit) {
+                        Text(stringResource(R.string.mxw01_strip_direction), style = MaterialTheme.typography.labelMedium)
+                        ChipRow(
+                            items = Mxw01StripDirection.entries.toList(), selected = mxwStripDirection,
+                            label = { context.getString(if (it == Mxw01StripDirection.VERTICAL) R.string.mxw01_vertical else R.string.mxw01_horizontal) },
+                            onSelect = { mxwStripDirection = it },
+                        )
+                        Text(
+                            stringResource(if (mxwStripDirection == Mxw01StripDirection.VERTICAL) R.string.mxw01_strip_help else R.string.mxw01_horizontal_help),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                         Stepper(stringResource(R.string.mxw01_strip_count), mxwStripCount, 2..8) { mxwStripCount = it }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.mxw01_strip_overlap), modifier = Modifier.weight(1f))
                             Switch(checked = mxwStripOverlap, onCheckedChange = { mxwStripOverlap = it })
                         }
-                        Text(
-                            stringResource(if (mxwStripOverlap) R.string.mxw01_strip_overlap_help else R.string.mxw01_strip_help),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        if (mxwStripOverlap) Text(stringResource(R.string.mxw01_strip_overlap_help), style = MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.mxw01_strip_guides), modifier = Modifier.weight(1f))
+                            Switch(checked = mxwStripGuides, onCheckedChange = { mxwStripGuides = it })
+                        }
+                        if (mxwStripGuides) Text(stringResource(R.string.mxw01_strip_guides_help), style = MaterialTheme.typography.bodySmall)
                     }
                     Text(stringResource(R.string.mxw01_intensity, mxwIntensity))
                     Slider(value = mxwIntensity.toFloat(), onValueChange = { mxwIntensity = it.toInt() }, valueRange = 0f..150f, steps = 149)
@@ -236,8 +254,12 @@ fun PrinterSettingsDialog(
                     Stepper(stringResource(if (mxwSplit) R.string.mxw01_strip_spacing else R.string.mxw01_spacing), mxwSpacing, 0..203) { mxwSpacing = it }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.mxw01_trim), modifier = Modifier.weight(1f))
-                        Switch(checked = mxwTrim, onCheckedChange = { mxwTrim = it })
+                        Switch(
+                            checked = mxwTrim && !(mxwSplit && mxwStripGuides),
+                            onCheckedChange = { mxwTrim = it }, enabled = !(mxwSplit && mxwStripGuides),
+                        )
                     }
+                    if (mxwSplit && mxwStripGuides) Text(stringResource(R.string.mxw01_guides_keep_edges), style = MaterialTheme.typography.bodySmall)
                 }
                 if (!isMxw01) {
                 Text(stringResource(R.string.printer_default_stock), style = MaterialTheme.typography.labelMedium)

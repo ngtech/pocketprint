@@ -2,6 +2,7 @@ package com.gulshan.pocketprint
 
 import com.gulshan.pocketprint.model.Mxw01Dither
 import com.gulshan.pocketprint.model.Mxw01Settings
+import com.gulshan.pocketprint.model.Mxw01StripDirection
 import com.gulshan.pocketprint.mxw01.Mxw01Layout
 import com.gulshan.pocketprint.mxw01.Mxw01Raster
 import com.gulshan.pocketprint.mxw01.Mxw01RowPacker
@@ -107,12 +108,18 @@ class Mxw01StripsTest {
     }
 
     @Test fun stripSettingsRoundTripAndLegacySettingsStayDisabled() {
-        val settings = Mxw01Settings(splitIntoStrips = true, stripCount = 5, stripOverlap = false)
+        val settings = Mxw01Settings(splitIntoStrips = true, stripCount = 5, stripOverlap = false,
+            stripDirection = Mxw01StripDirection.HORIZONTAL, stripGuides = false)
         assertEquals(settings, Json.decodeFromString<Mxw01Settings>(Json.encodeToString(settings)))
         val legacy = Json.decodeFromString<Mxw01Settings>("""{"intensity":111,"marginDots":4}""")
         assertFalse(legacy.splitIntoStrips)
         assertEquals(111, legacy.intensity)
         assertEquals(1, Mxw01Layout(legacy).strips)
+        assertEquals(Mxw01StripDirection.VERTICAL, legacy.stripDirection)
+        assertTrue(legacy.stripGuides)
+        val oldStripMode = Json.decodeFromString<Mxw01Settings>("""{"splitIntoStrips":true,"stripCount":3}""")
+        assertEquals(Mxw01StripDirection.VERTICAL, oldStripMode.stripDirection)
+        assertTrue(Mxw01Layout(oldStripMode).hasGuides)
     }
 
     @Test fun importedStripCountsStayWithinTheBoundedRenderWidth() {

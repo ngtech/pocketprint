@@ -10,7 +10,7 @@ Supplied APK SHA-256: `9bd3e23e3fde4c828d20dbbe181510088cab4a56a3821ba7ec7eef609
 Phone model, Android version, firmware, discovery route, negotiated MTU and
 printer-setting values were not recorded. Only the confirmed items are checked.
 
-Vertical-strip mode was added after these reported tests and remains physically
+Strip mode, both directions and page guides were added after these reported tests and remain physically
 unvalidated. The implementation/APK identity above records the earlier tested build.
 
 Record Android version/device, printer label and advertised name, firmware if
@@ -27,9 +27,12 @@ scale, margins, trimming and spacing. Close any other BLE connection first.
 - [ ] Print from Chrome using its native Print action.
 - [ ] Print from a PDF viewer using its native Print action.
 - [ ] Enable vertical-strip mode with three strips and print an A5/A4 document; check left-to-right order and complete edge content.
+- [ ] Select horizontal strips; check top-to-bottom order and turn each piece clockwise to assemble.
+- [ ] Enable original-page guides in both directions; check the assembled frame follows only the four original page edges, with no borders at internal cuts.
+- [ ] Align matching ticks at both edges of every overlap; check that guides do not cover document content.
 - [ ] Toggle overlap on and off; check matching join content and assembly alignment.
-- [ ] Enable blank-edge trimming on a page whose columns start/end at different heights; check that all strips still align.
-- [ ] Reopen printer settings and confirm the split/count/overlap choices persist.
+- [ ] Turn guides off and enable blank-edge trimming on a page whose columns start/end at different heights; check that all strips still align.
+- [ ] Reopen printer settings and confirm the split/direction/count/overlap/guides choices persist.
 - [ ] Turn strip mode off and confirm normal whole-page printing resumes.
 - [ ] Print A4 and Letter PDFs with content at all four edges; compare against preview.
 - [ ] Check grayscale/photo dithering and hard threshold independently.
