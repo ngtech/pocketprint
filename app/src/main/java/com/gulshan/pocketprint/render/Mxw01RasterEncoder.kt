@@ -11,6 +11,7 @@ import com.gulshan.pocketprint.model.PrintOptions
 import com.gulshan.pocketprint.mxw01.Mxw01Layout
 import com.gulshan.pocketprint.mxw01.Mxw01Protocol
 import com.gulshan.pocketprint.mxw01.Mxw01Raster
+import com.gulshan.pocketprint.mxw01.Mxw01RowPacker
 import com.gulshan.pocketprint.mxw01.Mxw01Spool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -41,15 +42,16 @@ object Mxw01RasterEncoder {
             DataOutputStream(output.outputStream().buffered()).use { spool ->
                 Mxw01Spool.begin(spool)
                 RandomAccessFile(pageFile, "rw").use { pageRaster ->
-                    var packer = Mxw01Raster(layout, config.dither)
+                    var packer = Mxw01RowPacker(layout.pageWidth, config.dither)
                     var height = 0
                     var firstInk = -1
                     var endInk = 0
-                    val pixels = IntArray(layout.width)
+                    val pixels = IntArray(layout.pageWidth)
+                    val sourceRow = ByteArray(layout.pageRowBytes)
                     repeat(options.copies.coerceAtLeast(1)) {
                         PdfRasterizer.forEachPageBanded(
                             pdf,
-                            targetWidthPx = layout.width,
+                            targetWidthPx = layout.pageWidth,
                             pageRange = options.pageRange,
                             maxBandPixels = Mxw01Protocol.WIDTH * 128,
                             onPageStart = { _, _, pageHeight ->
@@ -59,12 +61,12 @@ object Mxw01RasterEncoder {
                                 height = pageHeight
                                 firstInk = -1
                                 endInk = 0
-                                packer = Mxw01Raster(layout, config.dither)
+                                packer = Mxw01RowPacker(layout.pageWidth, config.dither)
                             },
                             onBand = { bitmap, offset, rows ->
                                 for (y in 0 until rows) {
                                     job.ensureActive()
-                                    bitmap.getPixels(pixels, 0, layout.width, 0, y, layout.width, 1)
+                                    bitmap.getPixels(pixels, 0, layout.pageWidth, 0, y, layout.pageWidth, 1)
                                     val row = packer.row(pixels)
                                     pageRaster.write(row)
                                     if (row.any { it != 0.toByte() }) {
@@ -76,16 +78,21 @@ object Mxw01RasterEncoder {
                             onPageEnd = {
                                 val start = if (config.trimBlank) firstInk.coerceAtLeast(0) else 0
                                 val count = if (config.trimBlank) (endInk - start).coerceAtLeast(0) else height
-                                pageFile.inputStream().use { input ->
-                                    input.channel.position(start.toLong() * Mxw01Protocol.ROW_BYTES)
-                                    Mxw01Spool.appendPage(
-                                        spool, input, count,
+                                // All strips use the same vertical trim bounds, preserving alignment.
+                                for (strip in 0 until layout.strips) {
+                                    pageRaster.seek(start.toLong() * layout.pageRowBytes)
+                                    Mxw01Spool.appendRows(
+                                        spool, count,
                                         before = config.marginDots + if (pages == 0) 0 else config.pageSpacingDots,
                                         after = config.marginDots,
                                         checkActive = { job.ensureActive() },
+                                        readRow = { target ->
+                                            pageRaster.readFully(sourceRow)
+                                            Mxw01Raster.copyStrip(sourceRow, layout.stripStart(strip), layout.width, layout.left, target)
+                                        },
                                     )
+                                    pages++
                                 }
-                                pages++
                             },
                         )
                     }

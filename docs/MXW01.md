@@ -57,8 +57,8 @@ permission is available; it does not claim that an idle printer is in range.
   48 mm printable width on a continuous roll with a finite 297 mm layout page.
   Android needs finite media dimensions; the roll itself has no fixed length.
 - A4, Letter and the existing conventional PDF media are available for app
-  layouts. Every received PDF page is fitted to the printable width, preserving
-  its aspect ratio, regardless of the layout page size selected upstream.
+  layouts. With strip splitting off, every received PDF page is fitted to the
+  printable width, preserving its aspect ratio, regardless of the layout size.
 - Scale is 25–100% of the width inside the chosen margins. It shrinks and centres
   the whole page; it does not crop it. Margins are 0–64 dots on each edge.
 - Dithering is hard threshold or Floyd–Steinberg. Error diffusion continues
@@ -79,13 +79,46 @@ permission is available; it does not claim that an idle printer is in range.
   page height does not dictate bitmap memory. Storage exhaustion is reported as
   an error, not handled by silently discarding content.
 - The preview uses the same raster spool, including padding and margins. It
-  shows the first selected PDF page. If that page exceeds four million preview
+  shows the first selected PDF page, including all its strips in print order.
+  If that output exceeds four million preview
   pixels, preview is declined rather than silently cropped. Printing still
   streams the complete page.
 
 There are no cutter, gap-sensing, calibration, feed/retract, speed or battery
 percentage controls for MXW01. Intensity is a protocol byte exposed only over
 the documented/tested application range **0–150**, default 93 (`0x5D`).
+
+### Split a large page into vertical strips
+
+Open the MXW01's **Printer settings**, turn on **Split pages into vertical
+strips**, choose **Strips per page** (2–8; default 3), and save. For example,
+an A5 page can become three strips instead of being reduced to a single narrow
+image. The mode is off by default, including for previously saved printers.
+In Android's print dialog, choose **A5** (or **A4**) as the document layout size
+when printing a sheet of that size. PocketPrint splits the PDF layout it receives.
+
+The separate **Overlap adjoining strips** toggle repeats approximately 2 mm
+(16 dots) at each join to help align the pieces. Turn it off for adjoining
+sections without repeated content. The complete page is resized proportionally
+to the combined width. Strip count, scaling and margins determine its final
+assembled size. Each strip then fits the printer's 384-dot head.
+
+Strips print **left to right**, one complete vertical section at a time, followed
+by the next PDF page. Copies repeat the document in that order. Page / strip
+spacing inserts the selected number of white rows between sections; cut them
+manually. No cutter commands are sent.
+Trim the blank paper edges as needed when assembling the strips.
+
+All strips share the same vertical scale and trim bounds, even if one is blank
+or contains text at a different height. Blank strips are retained so the page
+can be assembled correctly. Dithering is done once across the complete page
+before extraction, so repeated overlap pixels match exactly. The existing
+bounded render bands and disk spool are used for the wider page.
+
+The built-in test page remains a single head-width diagnostic. Exercise strip
+mode with an actual document and its preview. Physical strip assembly and
+overlap alignment still need testing on the printer; the earlier user-reported
+test-page and Gmail results predate this mode.
 
 ## Protocol and architecture
 
@@ -95,8 +128,9 @@ Explicit manual configuration is also possible. Existing ESC/POS, TSPL, ZPL,
 IPP, raw-socket and USB routing remains in place.
 
 `RenderPipeline → Mxw01RasterEncoder` uses the existing banded `PdfRasterizer`.
-`Mxw01Raster` converts one row at a time: black = 1, leftmost pixel = bit 0,
-48 bytes per row. The versioned **internal** spool stores a magic value and
+`Mxw01RowPacker` dithers one complete page row at a time. `Mxw01Raster` extracts
+head-width rows: black = 1, leftmost pixel = bit 0, 48 bytes per row. Overlap
+shares the same packed source pixels. The versioned **internal** spool stores a magic value and
 height-prefixed raster blocks; these container headers never go to the printer.
 `Mxw01Spool` pads/splits blocks. These classes do not depend on GATT.
 

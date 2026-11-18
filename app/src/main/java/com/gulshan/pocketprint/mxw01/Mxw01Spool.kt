@@ -19,10 +19,22 @@ object Mxw01Spool {
         after: Int = 0,
         checkActive: () -> Unit = {},
     ) {
+        val source = DataInputStream(input)
+        appendRows(out, rows, before, after, checkActive) { source.readFully(it) }
+    }
+
+    /** Reads only content rows; callers can extract a strip from a disk-backed full-page raster. */
+    fun appendRows(
+        out: DataOutputStream,
+        rows: Int,
+        before: Int = 0,
+        after: Int = 0,
+        checkActive: () -> Unit = {},
+        readRow: (ByteArray) -> Unit,
+    ) {
         require(rows >= 0 && before >= 0 && after >= 0)
         val total = (rows.toLong() + before + after).coerceAtLeast(1)
         val row = ByteArray(Mxw01Protocol.ROW_BYTES)
-        val source = DataInputStream(input)
         var position = 0L
         while (position < total) {
             val contentRows = minOf(total - position, Mxw01Protocol.MAX_ROWS.toLong()).toInt()
@@ -31,7 +43,7 @@ object Mxw01Spool {
             for (i in 0 until sentRows) {
                 checkActive()
                 val y = position + i
-                if (i < contentRows && y >= before && y < before.toLong() + rows) source.readFully(row)
+                if (i < contentRows && y >= before && y < before.toLong() + rows) readRow(row)
                 else row.fill(0)
                 out.write(row)
             }

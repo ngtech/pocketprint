@@ -93,6 +93,27 @@ class Mxw01SessionTest {
         assertTrue(link.closed)
     }
 
+    @Test fun multipleStripsAreAcceptedTransferredAndCompletedInOrder() = runTest {
+        val bytes = ByteArrayOutputStream()
+        DataOutputStream(bytes).use { out ->
+            Mxw01Spool.begin(out)
+            repeat(3) { strip ->
+                Mxw01Spool.appendPage(out, ByteArray(4320) { (strip + 1).toByte() }.inputStream(), 90)
+            }
+            Mxw01Spool.end(out)
+        }
+        val link = Link()
+        assertEquals(12960L, session(link).transmit(bytes.toByteArray().inputStream()))
+        assertEquals(
+            listOf("C:a2", "C:a1", "C:a9", "C:ad", "C:a1", "C:a9", "C:ad", "C:a1", "C:a9", "C:ad"),
+            link.events.filter { it.startsWith("C:") },
+        )
+        val transferred = ByteArrayOutputStream().also { out -> link.data.forEach { out.write(it) } }.toByteArray()
+        repeat(3) { strip ->
+            assertTrue(transferred.copyOfRange(strip * 4320, (strip + 1) * 4320).all { it == (strip + 1).toByte() })
+        }
+    }
+
     @Test fun completionWaiterIsReadyBeforeStartCanReply() = runTest {
         val link = Link().apply { immediateDone = true; complete = false }
         assertEquals(4320L, session(link).transmit(spool().inputStream()))

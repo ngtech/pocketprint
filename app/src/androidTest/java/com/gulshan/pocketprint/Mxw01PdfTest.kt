@@ -9,7 +9,10 @@ import com.gulshan.pocketprint.model.Mxw01Dither
 import com.gulshan.pocketprint.model.Mxw01Settings
 import com.gulshan.pocketprint.model.PrintOptions
 import com.gulshan.pocketprint.mxw01.Mxw01Spool
+import com.gulshan.pocketprint.mxw01.Mxw01Layout
+import com.gulshan.pocketprint.mxw01.Mxw01RowPacker
 import com.gulshan.pocketprint.render.Mxw01RasterEncoder
+import com.gulshan.pocketprint.render.PdfRasterizer
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -23,7 +26,7 @@ class Mxw01PdfTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val settings = Mxw01Settings(dither = Mxw01Dither.THRESHOLD, marginDots = 0, pageSpacingDots = 7)
 
-    private fun pdf(pages: Int = 2, height: Int = 300): File {
+    private fun pdf(pages: Int = 2, height: Int = 300, gradient: Boolean = false): File {
         val file = File.createTempFile("mxw01_input_", ".pdf", context.cacheDir)
         val document = PdfDocument()
         try {
@@ -31,6 +34,14 @@ class Mxw01PdfTest {
                 val page = document.startPage(PdfDocument.PageInfo.Builder(384, height, index + 1).create())
                 page.canvas.drawColor(Color.WHITE)
                 val paint = Paint().apply { color = Color.BLACK; isAntiAlias = false }
+                if (gradient) {
+                    for (x in 0 until 384) {
+                        val gray = x % 256
+                        paint.color = Color.rgb(gray, gray, gray)
+                        page.canvas.drawRect(x.toFloat(), 0f, x + 1f, height.toFloat(), paint)
+                    }
+                    paint.color = Color.BLACK
+                }
                 page.canvas.drawRect(0f, 10f, 8f, 20f, paint)
                 page.canvas.drawRect(376f, height - 20f, 384f, height - 10f, paint)
                 document.finishPage(page)
@@ -141,5 +152,94 @@ class Mxw01PdfTest {
             assertEquals(100, rendered.pageCount)
             assertEquals(100, pages(rendered.file).size)
         } finally { rendered.file.delete(); source.delete() }
+    }
+
+    @Test fun threeStripsWithoutOverlapRetainBothPageEdgesAndTheBlankMiddle() = runBlocking {
+        val source = pdf(pages = 1)
+        val config = settings.copy(splitIntoStrips = true, stripCount = 3, stripOverlap = false)
+        val rendered = Mxw01RasterEncoder.fromPdf(context, source, config, PrintOptions())
+        try {
+            val strips = pages(rendered.file)
+            assertEquals(3, rendered.pageCount)
+            assertEquals(listOf(900 * 48, 907 * 48, 907 * 48), strips.map { it.size })
+            assertEquals(255, strips[0][30 * 48].toInt() and 255)
+            assertTrue(strips[1].all { it == 0.toByte() })
+            assertEquals(255, strips[2][(869 + 7) * 48 + 47].toInt() and 255)
+        } finally { rendered.file.delete(); source.delete() }
+    }
+
+    @Test fun trimmingUsesCommonBoundsSoTheStripsStillAlign() = runBlocking {
+        val source = pdf(pages = 1)
+        val config = settings.copy(splitIntoStrips = true, stripOverlap = false, trimBlank = true)
+        val rendered = Mxw01RasterEncoder.fromPdf(context, source, config, PrintOptions())
+        try {
+            val strips = pages(rendered.file)
+            assertEquals(listOf(840 * 48, 847 * 48, 847 * 48), strips.map { it.size })
+            assertEquals(255, strips[0].first().toInt() and 255)
+            assertTrue(strips[1].all { it == 0.toByte() })
+            assertEquals(255, strips[2].last().toInt() and 255)
+        } finally { rendered.file.delete(); source.delete() }
+    }
+
+    @Test fun ditheredOverlappingStripsMatchTheWholePageAcrossRenderBands() = runBlocking {
+        val source = pdf(pages = 1, height = 120, gradient = true)
+        val config = settings.copy(splitIntoStrips = true, stripOverlap = true, dither = Mxw01Dither.FLOYD_STEINBERG)
+        val layout = Mxw01Layout(config)
+        val rendered = Mxw01RasterEncoder.fromPdf(context, source, config, PrintOptions())
+        try {
+            val strips = pages(rendered.file)
+            assertEquals(listOf(350 * 48, 357 * 48, 357 * 48), strips.map { it.size })
+            PdfRasterizer.forEachPage(source, targetWidthPx = layout.pageWidth) { _, bitmap ->
+                val packer = Mxw01RowPacker(layout.pageWidth, config.dither)
+                val pixels = IntArray(layout.pageWidth)
+                for (y in 0 until bitmap.height) {
+                    bitmap.getPixels(pixels, 0, pixels.size, 0, y, pixels.size, 1)
+                    val expected = packer.row(pixels)
+                    for (strip in 0 until layout.strips) for (x in 0 until layout.width) {
+                        val sourceX = layout.stripStart(strip) + x
+                        val sourceInk = expected[sourceX / 8].toInt() and (1 shl (sourceX % 8)) != 0
+                        val outputY = y + if (strip == 0) 0 else config.pageSpacingDots
+                        val outputInk = strips[strip][outputY * 48 + x / 8].toInt() and (1 shl (x % 8)) != 0
+                        if (sourceInk != outputInk) fail("Different pixel: strip=$strip x=$x y=$y")
+                    }
+                }
+            }
+        } finally { rendered.file.delete(); source.delete() }
+    }
+
+    @Test fun previewContainsAllStripsInTheirPrintOrder() = runBlocking {
+        val source = pdf(pages = 1)
+        val config = settings.copy(splitIntoStrips = true, stripOverlap = false)
+        val preview = Mxw01RasterEncoder.preview(context, source, config, PrintOptions())
+        try {
+            assertNotNull(preview)
+            assertEquals(384, preview!!.width)
+            assertEquals(2714, preview.height)
+            assertEquals(Color.BLACK, preview.getPixel(0, 30))
+            assertEquals(Color.WHITE, preview.getPixel(0, 907 + 30))
+            assertEquals(Color.BLACK, preview.getPixel(383, 1807 + 7 + 869))
+        } finally { preview?.recycle(); source.delete() }
+    }
+
+    @Test fun stripCountAppliesToEverySelectedPageAndCopy() = runBlocking {
+        val source = pdf()
+        val config = settings.copy(splitIntoStrips = true, stripOverlap = false)
+        val rendered = Mxw01RasterEncoder.fromPdf(context, source, config, PrintOptions(copies = 2))
+        try {
+            val strips = pages(rendered.file)
+            assertEquals(12, rendered.pageCount)
+            assertEquals(12, strips.size)
+            assertEquals(900 * 48, strips.first().size)
+            assertTrue(strips.drop(1).all { it.size == 907 * 48 })
+        } finally { rendered.file.delete(); source.delete() }
+    }
+
+    @Test fun disabledModeIgnoresRememberedStripCountAndOverlap() = runBlocking {
+        val source = pdf(pages = 1)
+        val normal = Mxw01RasterEncoder.fromPdf(context, source, settings, PrintOptions())
+        val disabled = Mxw01RasterEncoder.fromPdf(context, source, settings.copy(stripCount = 8, stripOverlap = false), PrintOptions())
+        try {
+            assertArrayEquals(normal.file.readBytes(), disabled.file.readBytes())
+        } finally { disabled.file.delete(); normal.file.delete(); source.delete() }
     }
 }

@@ -40,7 +40,6 @@ import com.gulshan.pocketprint.model.PrinterAddress
 import com.gulshan.pocketprint.model.linkAfterSettings
 import com.gulshan.pocketprint.transport.TscSdk
 import com.gulshan.pocketprint.model.Mxw01Dither
-import com.gulshan.pocketprint.model.Mxw01Settings
 import com.gulshan.pocketprint.model.PrinterCapabilities
 import com.gulshan.pocketprint.transport.Mxw01Connection
 import com.gulshan.pocketprint.transport.Mxw01Connections
@@ -109,6 +108,9 @@ fun PrinterSettingsDialog(
     var mxwMargin by rememberSaveable { mutableStateOf(printer.mxw01.marginDots) }
     var mxwTrim by rememberSaveable { mutableStateOf(printer.mxw01.trimBlank) }
     var mxwSpacing by rememberSaveable { mutableStateOf(printer.mxw01.pageSpacingDots) }
+    var mxwSplit by rememberSaveable { mutableStateOf(printer.mxw01.splitIntoStrips) }
+    var mxwStripCount by rememberSaveable { mutableStateOf(printer.mxw01.stripCount) }
+    var mxwStripOverlap by rememberSaveable { mutableStateOf(printer.mxw01.stripOverlap) }
     val isMxw01 = language == PrintLanguage.MXW01
 
     val isLabelPrinter = language == PrintLanguage.TSPL || language == PrintLanguage.ZPL
@@ -135,7 +137,11 @@ fun PrinterSettingsDialog(
             )
         },
         stock = if (isMxw01) stock().copy(sensing = MediaSensing.CONTINUOUS, gapMm = 0f) else stock(),
-        mxw01 = Mxw01Settings(mxwIntensity, mxwDither, mxwScale, mxwMargin, mxwTrim, mxwSpacing).validated(),
+        mxw01 = printer.mxw01.copy(
+            intensity = mxwIntensity, dither = mxwDither, scalePercent = mxwScale,
+            marginDots = mxwMargin, trimBlank = mxwTrim, pageSpacingDots = mxwSpacing,
+            splitIntoStrips = mxwSplit, stripCount = mxwStripCount, stripOverlap = mxwStripOverlap,
+        ).validated(),
         capabilities = if (isMxw01) PrinterCapabilities.MXW01 else printer.capabilities.copy(
             languages = listOf(language),
             mediaSizes = (listOf(media) + extraSizes + printer.capabilities.mediaSizes)
@@ -201,6 +207,21 @@ fun PrinterSettingsDialog(
                         Mxw01Connection.CONNECTED -> R.string.mxw01_connected
                     }))
                     Text(stringResource(R.string.mxw01_roll_help), style = MaterialTheme.typography.bodySmall)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.mxw01_split_strips), modifier = Modifier.weight(1f))
+                        Switch(checked = mxwSplit, onCheckedChange = { mxwSplit = it })
+                    }
+                    if (mxwSplit) {
+                        Stepper(stringResource(R.string.mxw01_strip_count), mxwStripCount, 2..8) { mxwStripCount = it }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.mxw01_strip_overlap), modifier = Modifier.weight(1f))
+                            Switch(checked = mxwStripOverlap, onCheckedChange = { mxwStripOverlap = it })
+                        }
+                        Text(
+                            stringResource(if (mxwStripOverlap) R.string.mxw01_strip_overlap_help else R.string.mxw01_strip_help),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Text(stringResource(R.string.mxw01_intensity, mxwIntensity))
                     Slider(value = mxwIntensity.toFloat(), onValueChange = { mxwIntensity = it.toInt() }, valueRange = 0f..150f, steps = 149)
                     Text(stringResource(R.string.mxw01_dithering), style = MaterialTheme.typography.labelMedium)
@@ -212,7 +233,7 @@ fun PrinterSettingsDialog(
                     Text(stringResource(R.string.mxw01_scale, mxwScale))
                     Slider(value = mxwScale.toFloat(), onValueChange = { mxwScale = it.toInt() }, valueRange = 25f..100f, steps = 74)
                     Stepper(stringResource(R.string.mxw01_margin), mxwMargin, 0..64) { mxwMargin = it }
-                    Stepper(stringResource(R.string.mxw01_spacing), mxwSpacing, 0..203) { mxwSpacing = it }
+                    Stepper(stringResource(if (mxwSplit) R.string.mxw01_strip_spacing else R.string.mxw01_spacing), mxwSpacing, 0..203) { mxwSpacing = it }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.mxw01_trim), modifier = Modifier.weight(1f))
                         Switch(checked = mxwTrim, onCheckedChange = { mxwTrim = it })

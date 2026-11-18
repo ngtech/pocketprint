@@ -14,12 +14,16 @@ data class Mxw01Settings(
     val marginDots: Int = 8,
     val trimBlank: Boolean = false,
     val pageSpacingDots: Int = 16,
+    val splitIntoStrips: Boolean = false,
+    val stripCount: Int = 3,
+    val stripOverlap: Boolean = true,
 ) {
     fun validated() = copy(
         intensity = intensity.coerceIn(0, 150),
         scalePercent = scalePercent.coerceIn(25, 100),
         marginDots = marginDots.coerceIn(0, 64),
         pageSpacingDots = pageSpacingDots.coerceIn(0, 203),
+        stripCount = stripCount.coerceIn(2, 8),
     )
 }
 
