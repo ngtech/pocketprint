@@ -6,6 +6,15 @@ can submit PDFs to the same queue and rendering pipeline as other PocketPrint
 printers. This backend is for the exact advertised name `MXW01`; AE30 alone does
 not identify a model. MXW01 is a proprietary protocol, not ESC/POS, TSPL or ZPL.
 
+## Hardware validation
+
+On 2026-11-18, the user reported successful physical printing of PocketPrint's
+test page and a print from Gmail on their MXW01 using the supplied debug APK.
+The tested implementation is commit `75880e41846f62b27593feb8dac2b2e96a0d8791`.
+This confirms those two reported print cases; Chrome, PDF viewers, long rolls,
+cancellation and the other hardware checks still need individual validation.
+See the [hardware checklist](MXW01_HARDWARE_TEST.md) for the APK identity and scope.
+
 ## Install and set up
 
 Build with JDK 17, Android SDK platform 36 and the project's Gradle wrapper:

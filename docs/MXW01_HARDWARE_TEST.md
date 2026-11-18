@@ -1,19 +1,28 @@
 # MXW01 hardware acceptance checklist
 
-Status: **not yet physically validated with this PocketPrint APK**.
-Fill this in after installing the build; passing automated tests does not tick
-any hardware item below.
+Status: **limited hardware validation reported by the user on 2026-11-18**.
+The user confirmed that the supplied PocketPrint APK physically printed both
+its test page and a print from Gmail on their MXW01. This records the user's
+report; automated/emulator tests remain separate evidence.
+
+Supplied implementation commit: `75880e41846f62b27593feb8dac2b2e96a0d8791`.
+Supplied APK SHA-256: `9bd3e23e3fde4c828d20dbbe181510088cab4a56a3821ba7ec7eef609e5d222f`.
+Phone model, Android version, firmware, discovery route, negotiated MTU and
+printer-setting values were not recorded. Only the confirmed items are checked.
 
 Record Android version/device, printer label and advertised name, firmware if
 known, APK SHA-256, git commit, negotiated MTU, paper width, intensity, dithering,
 scale, margins, trimming and spacing. Close any other BLE connection first.
 
-- [ ] Install debug APK; open the app and grant Bluetooth access when requested.
+- [x] Install the supplied PocketPrint debug APK (user-reported).
 - [ ] Discover MXW01 through Android's device picker, or exercise manual address entry.
 - [ ] Save it, reopen PocketPrint, and confirm settings and printer persist.
 - [ ] Enable the PocketPrint print service and find MXW01 in Android's Print dialog.
-- [ ] Print the test page; confirm both borders, fine rules and text are complete.
-- [ ] Print from Chrome, Gmail and a PDF viewer using their native Print actions.
+- [x] Physically print PocketPrint's test page (user-reported).
+- [ ] Inspect both borders, fine rules and all text for completeness.
+- [x] Physically print from Gmail (user-reported).
+- [ ] Print from Chrome using its native Print action.
+- [ ] Print from a PDF viewer using its native Print action.
 - [ ] Print A4 and Letter PDFs with content at all four edges; compare against preview.
 - [ ] Check grayscale/photo dithering and hard threshold independently.
 - [ ] Compare intensity 73, 93, 111 and 150; record results rather than assuming equal thermal response.

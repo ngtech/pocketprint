@@ -355,7 +355,9 @@ include intensity, dithering, scaling, margins, continuous-page spacing and a
 raster test page. See [MXW01 setup, protocol and limitations](docs/MXW01.md) and
 the [physical-printer checklist](docs/MXW01_HARDWARE_TEST.md).
 
-**Hardware validation of this PocketPrint implementation is still required.**
+**User-reported hardware validation (2026-11-18):** the supplied PocketPrint debug
+APK successfully printed its test page and a print from Gmail on an MXW01.
+The remaining checks are tracked in the [hardware checklist](docs/MXW01_HARDWARE_TEST.md).
 
 ## Build
 
@@ -493,7 +495,7 @@ to microns, a rotated media size to an orientation, a duplex mode to a `sides` v
 
 Both suites run in CI on every push, the on-device ones on an emulator alongside the rest.
 
-**What isn't proven.** Coverage beyond that one printer is thin — that's the real gap, and no
+**What isn't proven.** Coverage across printer models remains thin — that's the real gap, and no
 amount of code review closes it. Office documents need an external converter (a Gotenberg
 instance on your LAN works unmodified). IPPS printers present certificates they signed
 themselves; the app pins one on first use, after showing you the fingerprint to check against
